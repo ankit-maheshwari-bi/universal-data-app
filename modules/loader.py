@@ -14,7 +14,14 @@ def load_data(file):
             df = pd.read_parquet(file)
 
         elif filename.endswith('.txt'):
-            df = pd.read_csv(file)
+            try:
+                # Try reading as structured data
+                df = pd.read_csv(file, sep=None, engine='python')
+            except:
+                # Fallback: treat as raw text/log file
+                file.seek(0)  # IMPORTANT: reset pointer
+                lines = file.read().decode('utf-8').splitlines()
+                df = pd.DataFrame(lines, columns=["Raw_Text"])
 
         elif filename.endswith('.xlsx'):
             df = pd.read_excel(file)
