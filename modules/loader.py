@@ -15,13 +15,9 @@ def load_data(file):
 
         # ---------------- JSON ---------------- #
         elif filename.endswith('.json'):
-            file.seek(0)
-            try:
-                df = pd.read_json(file)
-            except:
-                file.seek(0)
-                data = json.load(file)
-                df = pd.json_normalize(data)
+               file.seek(0)
+               data = json.load(file)
+               df = pd.json_normalize(data)
 
         # ---------------- PARQUET ---------------- #
         elif filename.endswith('.parquet'):
