@@ -1,15 +1,22 @@
 import pandas as pd
 
 def get_profile(df):
-    profile = pd.DataFrame({
-        "Column": df.columns,
-        "Data Type": df.dtypes.values,
-        "Null Count": df.isnull().sum().values,
-        "Null %": (df.isnull().sum().values / len(df)) * 100,
-        "Unique Values": df.nunique().values
-    })
+    profile_data = []
 
-    return profile
+    for col in df.columns:
+        try:
+            unique_vals = df[col].nunique()
+        except:
+            unique_vals = "Unsupported (complex data)"
+
+        profile_data.append({
+            "Column": col,
+            "Data Type": str(df[col].dtype),
+            "Missing Values": df[col].isnull().sum(),
+            "Unique Values": unique_vals
+        })
+
+    return pd.DataFrame(profile_data)
 
 
 def detect_issues(df):
