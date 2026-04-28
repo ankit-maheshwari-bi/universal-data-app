@@ -9,7 +9,7 @@ def load_data(file):
         if filename.endswith('.csv'):
             try:
                 df = pd.read_csv(file)
-            except:
+            except Exception:
                 file.seek(0)
                 df = pd.read_csv(file, sep=None, engine='python', on_bad_lines='skip')
 
@@ -18,11 +18,10 @@ def load_data(file):
             file.seek(0)
             try:
                 df = pd.read_json(file)
-            except:
+            except Exception:
                 file.seek(0)
                 data = json.load(file)
 
-                # Handle nested JSON
                 if isinstance(data, dict):
                     df = pd.json_normalize(data)
                 elif isinstance(data, list):
@@ -42,10 +41,9 @@ def load_data(file):
             try:
                 file.seek(0)
                 df = pd.read_csv(file, sep=None, engine='python', on_bad_lines='skip')
-            except:
+            except Exception:
                 lines = content.splitlines()
 
-                # Try splitting structured logs
                 split_data = [line.split() for line in lines if line.strip()]
 
                 if len(split_data) > 0 and len(split_data[0]) > 3:
@@ -53,13 +51,25 @@ def load_data(file):
                 else:
                     df = pd.DataFrame(lines, columns=["Raw_Text"])
 
-        # ---------------- EXCEL ---------------- #
-        elif filename.endswith('.xlsx') or filename.endswith('.xls'):
-            df = pd.read_excel(file)
+        # ---------------- EXCEL (FIXED) ---------------- #
+        elif filename.endswith('.xlsx'):
+            file.seek(0)
+            df = pd.read_excel(file, engine="openpyxl")
 
-        # ---------------- UNSUPPORTED ---------------- #
+        elif filename.endswith('.xls'):
+            file.seek(0)
+            try:
+                df = pd.read_excel(file, engine="xlrd")
+            except Exception:
+                return None, "xlrd is required for .xls files. Install it using pip install xlrd"
+
+        # ---------------- FALLBACK TRY (SMART) ---------------- #
         else:
-            return None, "Unsupported file format"
+            file.seek(0)
+            try:
+                df = pd.read_csv(file, sep=None, engine='python', on_bad_lines='skip')
+            except Exception:
+                return None, "Unsupported file format or unable to parse"
 
         # ---------------- FINAL CLEANUP ---------------- #
         if df is None or df.empty:
