@@ -3,6 +3,10 @@ from modules.recommender import get_recommendations
 from modules.profiler import get_profile, detect_issues
 from modules.loader import load_data
 
+# NEW IMPORTS
+from modules.classifier import classify_columns
+import plotly.express as px
+
 import streamlit as st
 import pandas as pd
 
@@ -49,14 +53,24 @@ if file:
         num_cols = len(df.select_dtypes(include=['number']).columns)
         cat_cols = len(df.select_dtypes(include=['object']).columns)
 
-        # Health Score
-        health_score = 100
-        if total_rows > 0:
-            health_score -= (missing_values / (total_rows * total_cols)) * 50
-            health_score -= (duplicate_rows / total_rows) * 50
+        # ---------------- IMPROVED HEALTH SCORE ---------------- #
+        missing_weight = 0.4
+        duplicate_weight = 0.3
+        consistency_weight = 0.3
 
-        health_score = max(0, round(health_score, 2))
+        missing_score = 1 - (missing_values / (total_rows * total_cols)) if total_rows > 0 else 1
+        duplicate_score = 1 - (duplicate_rows / total_rows) if total_rows > 0 else 1
+        consistency_score = num_cols / total_cols if total_cols > 0 else 1
 
+        health_score = (
+            missing_score * missing_weight +
+            duplicate_score * duplicate_weight +
+            consistency_score * consistency_weight
+        ) * 100
+
+        health_score = round(health_score, 2)
+
+        # ---------------- KPI DISPLAY ---------------- #
         k1, k2, k3, k4, k5, k6 = st.columns(6)
 
         k1.metric("Rows", total_rows)
@@ -99,28 +113,27 @@ if file:
         elif menu == "Insights":
             st.markdown("## 🧠 Data Understanding & Insights")
 
-            num_cols = df.select_dtypes(include=['number']).columns
-            cat_cols = df.select_dtypes(include=['object']).columns
+            col_types = classify_columns(df)
 
-            st.info(f"Dataset contains {len(num_cols)} numeric columns and {len(cat_cols)} categorical columns")
+            numeric_cols = [col for col, t in col_types.items() if t == "Numeric"]
+            categorical_cols = [col for col, t in col_types.items() if t == "Categorical"]
 
-            use_cases = []
+            st.info(f"Detected {len(numeric_cols)} numeric and {len(categorical_cols)} categorical columns")
 
-            if "Sales" in df.columns:
-                use_cases.append("Sales Analysis can be performed")
+            # ---------------- AUTO VISUALS ---------------- #
+            st.markdown("### 📊 Auto Visualizations")
 
-            if "Profit" in df.columns:
-                use_cases.append("Profitability analysis can be done")
+            if numeric_cols:
+                fig = px.histogram(df, x=numeric_cols[0])
+                st.plotly_chart(fig, use_container_width=True)
 
-            if len(num_cols) > 0:
-                use_cases.append("Trend and forecasting analysis possible")
+            if categorical_cols:
+                cat_data = df[categorical_cols[0]].value_counts().reset_index()
+                cat_data.columns = ['Category', 'Count']
+                fig = px.bar(cat_data, x='Category', y='Count')
+                st.plotly_chart(fig, use_container_width=True)
 
-            if len(cat_cols) > 0:
-                use_cases.append("Segmentation and grouping analysis possible")
-
-            for uc in use_cases:
-                st.success(uc)
-
+            # ---------------- INSIGHTS ---------------- #
             st.markdown("### 💡 Decision Insights")
 
             insights = generate_insights(df)
@@ -137,11 +150,14 @@ if file:
 
             actions = []
 
-            # Missing values
+            # SMART Missing handling
             nulls = df.isnull().sum()
             for col, val in nulls.items():
                 if val > 0:
-                    actions.append(f"Fill missing values in '{col}' ({val} records)")
+                    if df[col].dtype in ['int64', 'float64']:
+                        actions.append(f"Fill missing values in '{col}' using median")
+                    else:
+                        actions.append(f"Fill missing values in '{col}' using mode")
 
             # Duplicates
             if df.duplicated().sum() > 0:
@@ -150,7 +166,7 @@ if file:
             # Data type suggestions
             for col in df.columns:
                 if df[col].dtype == 'object':
-                    actions.append(f"Validate data type for '{col}'")
+                    actions.append(f"Validate or convert data type for '{col}'")
 
             if actions:
                 for act in actions:
@@ -158,6 +174,26 @@ if file:
             else:
                 st.success("No major actions required")
 
+            # ---------------- AUTO CLEAN BUTTON ---------------- #
+            st.markdown("### 🧹 Auto Fix Data")
+
+            if st.button("Auto Clean Data"):
+                original_shape = df.shape
+
+                # Fill numeric
+                df.fillna(df.median(numeric_only=True), inplace=True)
+
+                # Fill categorical
+                for col in df.select_dtypes(include=['object']).columns:
+                    if not df[col].mode().empty:
+                        df[col].fillna(df[col].mode()[0], inplace=True)
+
+                # Drop duplicates
+                df.drop_duplicates(inplace=True)
+
+                st.success(f"Data cleaned! Rows reduced from {original_shape[0]} to {df.shape[0]}")
+
+            # ---------------- RECOMMENDATIONS ---------------- #
             st.markdown("### 💡 Transformation Suggestions")
 
             recs = get_recommendations(df)
